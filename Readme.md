@@ -110,21 +110,22 @@ Get aggregated statistics for logs within a time range.
 - Distinct log levels
 - Earliest and latest log timestamps
 
-### `get_logs_by_time_range`
+### `get_logs_from_time`
 
-Query logs between two specific time points.
+Get logs from a specific timestamp forward. Useful for investigating past incidents by passing the incident timestamp.
 
 **Parameters:**
-- `startTime` (string): Start time
-- `endTime` (string): End time
+- `startTime` (string): Timestamp to get logs from. Returns the 20 most recent logs from this time forward
 - `sourceName` (string, optional): Source name (defaults to configured source)
-- `limit` (number, optional): Maximum results (default: 100, max: 1000)
+- `limit` (number, optional): Number of logs to return (default: 20, max: 20)
 - `formatted` (boolean, optional): Include formatted timestamps (default: false)
 
 **Time Format Examples:**
 - ISO 8601: `2024-01-15T10:30:00Z`
-- Relative: `1 hour ago`, `2 days ago`, `yesterday`, `now`
+- Relative: `1 hour ago`, `2 days ago`, `30 minutes ago`, `yesterday`, `now`
 - Unix timestamp: `1705312200`
+
+**Use Case:** Pass any timestamp to see what happened from that point forward. Perfect for investigating incidents by providing the incident timestamp.
 
 ## Development
 
