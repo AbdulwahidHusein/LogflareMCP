@@ -411,17 +411,12 @@ export function registerTools(server: McpServer, config: LogflareApiConfig): voi
   );
 
   server.tool(
-    "get_logs_by_time_range",
+    "get_logs_from_time",
     {
       startTime: z
         .string()
         .describe(
-          "Start time. Accepts: ISO 8601 (e.g., '2024-01-15T10:30:00Z'), relative time (e.g., '1 hour ago', '2 days ago'), or Unix timestamp. Examples: '2024-01-15 10:30:00', '1 hour ago', 'yesterday'."
-        ),
-      endTime: z
-        .string()
-        .describe(
-          "End time. Accepts: ISO 8601 (e.g., '2024-01-15T15:45:00Z'), relative time (e.g., 'now', '1 hour ago'), or Unix timestamp. Must be after startTime. Examples: 'now', '2024-01-15 15:45:00', '30 minutes ago'."
+          "Timestamp to get logs from. Returns the 20 most recent logs from this time forward. Use this to investigate past incidents by passing the incident timestamp. Accepts: ISO 8601 (e.g., '2024-01-15T10:30:00Z'), relative time (e.g., '1 hour ago', '2 days ago', '30 minutes ago'), or Unix timestamp. Examples: '2024-01-15 10:30:00', '1 hour ago', 'yesterday', 'now'. Pass any timestamp to see what happened from that point forward."
         ),
       sourceName: z
         .string()
@@ -434,7 +429,7 @@ export function registerTools(server: McpServer, config: LogflareApiConfig): voi
         .optional()
         .default(20)
         .describe(
-          "Maximum number of logs to return (default: 20, max: 100). IMPORTANT: Keep this small (20-50) to avoid large file outputs. For time ranges longer than 1 hour, use get_log_stats for summary statistics instead. Returns logs ordered by timestamp descending (newest first)."
+          "Number of logs to return (default: 20, max: 20). Always returns the most recent logs from startTime forward, ordered by timestamp descending."
         ),
       formatted: z
         .boolean()
@@ -444,21 +439,13 @@ export function registerTools(server: McpServer, config: LogflareApiConfig): voi
           "If true, returns human-readable timestamps in addition to microsecond timestamps. Default: false."
         ),
     },
-    async ({ startTime, endTime, sourceName, limit = 20, formatted = false }) => {
+    async ({ startTime, sourceName, limit = 20, formatted = false }) => {
       try {
         const tableName = sourceName || sourceToken;
 
-        const maxLimit = 100;
-        const actualLimit = Math.min(limit || 20, maxLimit);
-
-        if (limit && limit > maxLimit) {
-          console.warn(
-            `Limit ${limit} exceeds maximum of ${maxLimit}. Using ${maxLimit} instead.`
-          );
-        }
+        const actualLimit = Math.min(limit || 20, 20);
 
         const startTimestamp = parseTimeToTimestamp(startTime);
-        const endTimestamp = parseTimeToTimestamp(endTime);
 
         let sql: string;
 
@@ -472,7 +459,7 @@ export function registerTools(server: McpServer, config: LogflareApiConfig): voi
               FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', timestamp) as formatted_timestamp,
               timestamp as timestamp_micros
             FROM \`${tableName}\`
-            WHERE timestamp >= ${startTimestamp} AND timestamp <= ${endTimestamp}
+            WHERE timestamp >= ${startTimestamp}
             ORDER BY timestamp DESC
             LIMIT ${actualLimit}
           `;
@@ -485,7 +472,7 @@ export function registerTools(server: McpServer, config: LogflareApiConfig): voi
               level,
               id
             FROM \`${tableName}\`
-            WHERE timestamp >= ${startTimestamp} AND timestamp <= ${endTimestamp}
+            WHERE timestamp >= ${startTimestamp}
             ORDER BY timestamp DESC
             LIMIT ${actualLimit}
           `;
@@ -493,31 +480,20 @@ export function registerTools(server: McpServer, config: LogflareApiConfig): voi
 
         const result = (await executeQuery(sql, config)) as unknown[];
 
-        const response: {
-          source: string;
-          startTime: string;
-          endTime: string;
-          count: number;
-          logs: unknown[];
-          warning?: string;
-        } = {
-          source: tableName,
-          startTime: startTime,
-          endTime: endTime,
-          count: result.length,
-          logs: result,
-        };
-
-        if (limit && limit > 50) {
-          response.warning =
-            `Large limit (${limit}) may produce large outputs. Consider using get_log_stats for summary statistics instead.`;
-        }
-
         return {
           content: [
             {
               type: "text",
-              text: JSON.stringify(response, null, 2),
+              text: JSON.stringify(
+                {
+                  source: tableName,
+                  startTime: startTime,
+                  count: result.length,
+                  logs: result,
+                },
+                null,
+                2
+              ),
             },
           ],
         };
