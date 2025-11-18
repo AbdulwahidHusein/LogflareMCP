@@ -432,9 +432,9 @@ export function registerTools(server: McpServer, config: LogflareApiConfig): voi
       limit: z
         .number()
         .optional()
-        .default(100)
+        .default(20)
         .describe(
-          "Maximum number of logs to return (default: 100, max: 1000). Returns logs ordered by timestamp descending (newest first)."
+          "Maximum number of logs to return (default: 20, max: 100). IMPORTANT: Keep this small (20-50) to avoid large file outputs. For time ranges longer than 1 hour, use get_log_stats for summary statistics instead. Returns logs ordered by timestamp descending (newest first)."
         ),
       formatted: z
         .boolean()
@@ -444,9 +444,19 @@ export function registerTools(server: McpServer, config: LogflareApiConfig): voi
           "If true, returns human-readable timestamps in addition to microsecond timestamps. Default: false."
         ),
     },
-    async ({ startTime, endTime, sourceName, limit = 100, formatted = false }) => {
+    async ({ startTime, endTime, sourceName, limit = 20, formatted = false }) => {
       try {
         const tableName = sourceName || sourceToken;
+
+        const maxLimit = 100;
+        const actualLimit = Math.min(limit || 20, maxLimit);
+
+        if (limit && limit > maxLimit) {
+          console.warn(
+            `Limit ${limit} exceeds maximum of ${maxLimit}. Using ${maxLimit} instead.`
+          );
+        }
+
         const startTimestamp = parseTimeToTimestamp(startTime);
         const endTimestamp = parseTimeToTimestamp(endTime);
 
@@ -464,7 +474,7 @@ export function registerTools(server: McpServer, config: LogflareApiConfig): voi
             FROM \`${tableName}\`
             WHERE timestamp >= ${startTimestamp} AND timestamp <= ${endTimestamp}
             ORDER BY timestamp DESC
-            LIMIT ${Math.min(limit, 1000)}
+            LIMIT ${actualLimit}
           `;
         } else {
           sql = `
@@ -477,27 +487,37 @@ export function registerTools(server: McpServer, config: LogflareApiConfig): voi
             FROM \`${tableName}\`
             WHERE timestamp >= ${startTimestamp} AND timestamp <= ${endTimestamp}
             ORDER BY timestamp DESC
-            LIMIT ${Math.min(limit, 1000)}
+            LIMIT ${actualLimit}
           `;
         }
 
         const result = (await executeQuery(sql, config)) as unknown[];
 
+        const response: {
+          source: string;
+          startTime: string;
+          endTime: string;
+          count: number;
+          logs: unknown[];
+          warning?: string;
+        } = {
+          source: tableName,
+          startTime: startTime,
+          endTime: endTime,
+          count: result.length,
+          logs: result,
+        };
+
+        if (limit && limit > 50) {
+          response.warning =
+            `Large limit (${limit}) may produce large outputs. Consider using get_log_stats for summary statistics instead.`;
+        }
+
         return {
           content: [
             {
               type: "text",
-              text: JSON.stringify(
-                {
-                  source: tableName,
-                  startTime: startTime,
-                  endTime: endTime,
-                  count: result.length,
-                  logs: result,
-                },
-                null,
-                2
-              ),
+              text: JSON.stringify(response, null, 2),
             },
           ],
         };
