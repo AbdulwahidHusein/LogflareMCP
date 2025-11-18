@@ -460,7 +460,7 @@ export function registerTools(server: McpServer, config: LogflareApiConfig): voi
               timestamp as timestamp_micros
             FROM \`${tableName}\`
             WHERE timestamp >= ${startTimestamp}
-            ORDER BY timestamp DESC
+            ORDER BY timestamp ASC
             LIMIT ${actualLimit}
           `;
         } else {
@@ -473,7 +473,7 @@ export function registerTools(server: McpServer, config: LogflareApiConfig): voi
               id
             FROM \`${tableName}\`
             WHERE timestamp >= ${startTimestamp}
-            ORDER BY timestamp DESC
+            ORDER BY timestamp ASC
             LIMIT ${actualLimit}
           `;
         }
